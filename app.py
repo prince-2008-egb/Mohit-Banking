@@ -15,6 +15,8 @@ app = Flask(__name__)
 app.secret_key = "mohit-banking-demo-key"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Existing JSON file
 DATA_FILE = os.path.join(BASE_DIR, "bank_data.json")
 
 LOCK = threading.Lock()
@@ -25,6 +27,7 @@ LOCK = threading.Lock()
 # =========================
 
 def create_database():
+
     data = {
         "users": [
             {
@@ -45,35 +48,51 @@ def create_database():
 
 
 def load_database():
+
     if not os.path.exists(DATA_FILE):
         create_database()
 
     try:
+
         with open(DATA_FILE, "r", encoding="utf-8") as file:
             data = json.load(file)
 
         if not isinstance(data, dict):
+
             create_database()
-            return load_database()
+
+            with open(DATA_FILE, "r", encoding="utf-8") as file:
+                data = json.load(file)
 
         data.setdefault("users", [])
+
         return data
 
     except Exception:
+
         create_database()
-        return load_database()
+
+        with open(DATA_FILE, "r", encoding="utf-8") as file:
+            return json.load(file)
 
 
 def save_database(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as file:
+
+    temporary_file = DATA_FILE + ".tmp"
+
+    with open(temporary_file, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4)
+
+    os.replace(temporary_file, DATA_FILE)
 
 
 def find_user(account_no):
+
     database = load_database()
 
-    for user in database["users"]:
-        if str(user["account_no"]) == str(account_no):
+    for user in database.get("users", []):
+
+        if str(user.get("account_no", "")) == str(account_no):
             return user
 
     return None
@@ -102,8 +121,15 @@ def admin_required(function):
     def wrapper(*args, **kwargs):
 
         if session.get("is_admin") is not True:
-            flash("Admin access required.", "error")
-            return redirect(url_for("dashboard"))
+
+            flash(
+                "Admin access required.",
+                "error"
+            )
+
+            return redirect(
+                url_for("dashboard")
+            )
 
         return function(*args, **kwargs)
 
@@ -137,11 +163,13 @@ def login():
     if request.method == "POST":
 
         account_no = request.form.get(
-            "account_no", ""
+            "account_no",
+            ""
         ).strip().upper()
 
         password = request.form.get(
-            "password", ""
+            "password",
+            ""
         )
 
         user = find_user(account_no)
@@ -149,18 +177,22 @@ def login():
         if user:
 
             try:
+
                 correct = check_password_hash(
-                    user["password_hash"],
+                    user.get("password_hash", ""),
                     password
                 )
+
             except Exception:
+
                 correct = False
 
             if correct:
 
                 session["account_no"] = user["account_no"]
+
                 session["is_admin"] = (
-                    user["account_type"] == "Admin"
+                    user.get("account_type") == "Admin"
                 )
 
                 if session["is_admin"]:
@@ -198,15 +230,18 @@ def register():
     if request.method == "POST":
 
         name = request.form.get(
-            "name", ""
+            "name",
+            ""
         ).strip()
 
         email = request.form.get(
-            "email", ""
+            "email",
+            ""
         ).strip()
 
         phone = request.form.get(
-            "phone", ""
+            "phone",
+            ""
         ).strip()
 
         account_type = request.form.get(
@@ -215,38 +250,53 @@ def register():
         )
 
         password = request.form.get(
-            "password", ""
+            "password",
+            ""
         )
 
         confirm_password = request.form.get(
-            "confirm_password", ""
+            "confirm_password",
+            ""
         )
 
         if not name:
+
             flash(
                 "Please enter your name.",
                 "error"
             )
-            return render_template("register.html")
+
+            return render_template(
+                "register.html"
+            )
 
         if len(password) < 6:
+
             flash(
                 "Password must contain at least 6 characters.",
                 "error"
             )
-            return render_template("register.html")
+
+            return render_template(
+                "register.html"
+            )
 
         if password != confirm_password:
+
             flash(
                 "Passwords do not match.",
                 "error"
             )
-            return render_template("register.html")
+
+            return render_template(
+                "register.html"
+            )
 
         if account_type not in [
             "Savings",
             "Current"
         ]:
+
             account_type = "Savings"
 
         with LOCK:
@@ -255,37 +305,44 @@ def register():
 
             numbers = []
 
-            for user in database["users"]:
+            for user in database.get("users", []):
 
                 account = str(
                     user.get("account_no", "")
                 )
 
                 if account.isdigit():
-                    numbers.append(
-                        int(account)
-                    )
+                    numbers.append(int(account))
 
-            if numbers:
-                new_account = max(numbers) + 1
-            else:
-                new_account = 100001
-
-            new_account = str(new_account)
+            new_account = str(
+                max(numbers) + 1
+                if numbers
+                else 100001
+            )
 
             new_user = {
+
                 "account_no": new_account,
+
                 "name": name,
+
                 "email": email,
+
                 "phone": phone,
+
                 "account_type": account_type,
+
                 "password_hash":
                     generate_password_hash(password),
+
                 "balance": 0.0,
+
                 "transactions": []
             }
 
-            database["users"].append(new_user)
+            database["users"].append(
+                new_user
+            )
 
             save_database(database)
 
@@ -294,7 +351,9 @@ def register():
             created_account=new_account
         )
 
-    return render_template("register.html")
+    return render_template(
+        "register.html"
+    )
 
 
 # =========================
@@ -323,7 +382,10 @@ def dashboard():
 
     transactions = list(
         reversed(
-            user.get("transactions", [])
+            user.get(
+                "transactions",
+                []
+            )
         )
     )
 
@@ -344,10 +406,16 @@ def dashboard():
 def deposit():
 
     try:
+
         amount = float(
-            request.form.get("amount", 0)
+            request.form.get(
+                "amount",
+                0
+            )
         )
-    except:
+
+    except (ValueError, TypeError):
+
         amount = 0
 
     if amount <= 0:
@@ -381,23 +449,32 @@ def deposit():
             )
 
         user["balance"] = round(
-            float(user.get("balance", 0))
-            + amount,
+            float(
+                user.get(
+                    "balance",
+                    0
+                )
+            ) + amount,
             2
         )
 
-        transaction = {
-            "title": "Cash Deposit",
-            "amount": f"+₹{amount:,.2f}",
-            "type": "deposit",
-            "date": datetime.now().strftime(
-                "%d %b %Y, %I:%M %p"
-            )
-        }
-
         user.setdefault(
-            "transactions", []
-        ).append(transaction)
+            "transactions",
+            []
+        ).append({
+
+            "title": "Cash Deposit",
+
+            "amount":
+                f"+₹{amount:,.2f}",
+
+            "type": "deposit",
+
+            "date":
+                datetime.now().strftime(
+                    "%d %b %Y, %I:%M %p"
+                )
+        })
 
         save_database(database)
 
@@ -420,10 +497,16 @@ def deposit():
 def withdraw():
 
     try:
+
         amount = float(
-            request.form.get("amount", 0)
+            request.form.get(
+                "amount",
+                0
+            )
         )
-    except:
+
+    except (ValueError, TypeError):
+
         amount = 0
 
     if amount <= 0:
@@ -457,7 +540,10 @@ def withdraw():
             )
 
         balance = float(
-            user.get("balance", 0)
+            user.get(
+                "balance",
+                0
+            )
         )
 
         if amount > balance:
@@ -476,18 +562,23 @@ def withdraw():
             2
         )
 
-        transaction = {
-            "title": "Cash Withdrawal",
-            "amount": f"-₹{amount:,.2f}",
-            "type": "withdraw",
-            "date": datetime.now().strftime(
-                "%d %b %Y, %I:%M %p"
-            )
-        }
-
         user.setdefault(
-            "transactions", []
-        ).append(transaction)
+            "transactions",
+            []
+        ).append({
+
+            "title": "Cash Withdrawal",
+
+            "amount":
+                f"-₹{amount:,.2f}",
+
+            "type": "withdraw",
+
+            "date":
+                datetime.now().strftime(
+                    "%d %b %Y, %I:%M %p"
+                )
+        })
 
         save_database(database)
 
@@ -502,7 +593,7 @@ def withdraw():
 
 
 # =========================
-# ADMIN DASHBOARD
+# ADMIN
 # =========================
 
 @app.route("/admin")
@@ -512,18 +603,21 @@ def admin():
 
     database = load_database()
 
-    users = []
-    total_balance = 0.0
+    users = [
+        user
+        for user in database.get("users", [])
+        if user.get("account_type") != "Admin"
+    ]
 
-    for user in database["users"]:
-
-        if user.get("account_type") != "Admin":
-
-            users.append(user)
-
-            total_balance += float(
-                user.get("balance", 0)
+    total_balance = sum(
+        float(
+            user.get(
+                "balance",
+                0
             )
+        )
+        for user in users
+    )
 
     return render_template(
         "admin.html",
@@ -549,13 +643,27 @@ def delete_user(account_no):
         database = load_database()
 
         database["users"] = [
+
             user
-            for user in database["users"]
+
+            for user in database.get(
+                "users",
+                []
+            )
+
             if not (
-                str(user.get("account_no"))
-                == str(account_no)
-                and user.get("account_type")
-                != "Admin"
+                str(
+                    user.get(
+                        "account_no",
+                        ""
+                    )
+                ) == str(account_no)
+
+                and
+
+                user.get(
+                    "account_type"
+                ) != "Admin"
             )
         ]
 
@@ -572,25 +680,41 @@ def delete_user(account_no):
 
 
 # =========================
-# START SERVER
+# RUN
 # =========================
 
 if __name__ == "__main__":
 
-    print("")
-    print("================================")
-    print("          MOHIT BANKING")
-    print("================================")
-    print("")
-    print("Database : bank_data.json")
-    print("Admin Account : ADMIN001")
-    print("Admin Password : admin123")
-    print("")
-    print("Open: http://127.0.0.1:5000")
-    print("")
+    print(
+        "================================"
+    )
+
+    print(
+        "          MOHIT BANKING"
+    )
+
+    print(
+        "================================"
+    )
+
+    print(
+        "Database : bank_data.json"
+    )
+
+    print(
+        "Admin Account : ADMIN001"
+    )
+
+    print(
+        "Admin Password : admin123"
+    )
+
+    print(
+        "Open: http://127.0.0.1:5000"
+    )
 
     app.run(
         host="0.0.0.0",
         port=5000,
         debug=True
-                )
+    )
